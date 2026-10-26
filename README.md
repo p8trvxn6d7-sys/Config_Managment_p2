@@ -1,8 +1,8 @@
 # depgraph
 
-Инструмент визуализации графа зависимостей npm-пакетов. Зависимости получаются напрямую из репозитория, без менеджеров пакетов и сторонних библиотек.
+Инструмент визуализации графа зависимостей npm-пакетов. Зависимости получаются напрямую из репозитория, без менеджеров пакетов и сторонних библиотек (только стандартная библиотека Python).
 
-Практическая работа 2, вариант 31. Реализован этап 1: CLI с настройкой параметров и проверкой ошибок.
+Практическая работа 2, вариант 31. Реализованы этапы 1 и 2: CLI с проверкой параметров и получение прямых зависимостей пакета заданной версии.
 
 ## Параметры
 
@@ -11,9 +11,18 @@
 - --package - имя анализируемого пакета (обязательный)
 - --repo - URL репозитория или путь к файлу тестового репозитория (обязательный)
 - --test-mode - режим работы с тестовым репозиторием, --repo тогда путь к файлу
-- --version - версия пакета в формате semver, например 4.18.2 (обязательный)
+- --version - версия пакета в формате semver, например 4.3.4 (обязательный)
 
-При запуске параметры выводятся в формате ключ-значение.
+## Как работает
+
+В обычном режиме программа запрашивает у репозитория npm документ версии пакета по адресу URL/имя/версия (например https://registry.npmjs.org/debug/4.3.4) и выводит поле dependencies, то есть прямые зависимости с требуемыми диапазонами версий. Поля devDependencies, peerDependencies и optionalDependencies не учитываются.
+
+В тестовом режиме читается текстовый файл, в котором каждая строка описывает пакет: имя большими латинскими буквами, двоеточие и список его прямых зависимостей через пробел. Пустые строки игнорируются.
+
+    A: B C
+    B: D
+    C: D
+    D:
 
 ## Проверки и ошибки
 
@@ -22,38 +31,40 @@
 - имя пакета: непустое, не длиннее 214 символов, корректное имя npm; в тестовом режиме только большие латинские буквы
 - репозиторий: в обычном режиме URL со схемой http или https и хостом; в тестовом режиме существующий читаемый файл
 - версия: формат X.Y.Z, допускаются суффиксы -prerelease и +build
+- пакет или версия не найдены в репозитории (HTTP 404), другие ошибки HTTP, недоступный репозиторий, некорректный JSON, неожиданный формат ответа
+- тестовый репозиторий: неверный формат строки, пакет отсутствует в файле
 - отсутствие обязательной или неизвестная опция: ошибка argparse с кодом 2
 
 ## Запуск
 
-    make run ARGS="--package express --repo https://registry.npmjs.org --version 4.18.2"
+    make run ARGS="--package debug --repo https://registry.npmjs.org --version 4.3.4"
 
 ## Тесты
 
     make test
 
+Тесты не обращаются к сети: для проверки получения зависимостей поднимается локальный HTTP-сервер, имитирующий репозиторий npm.
+
 ## Примеры
 
-    $ make run ARGS="--package express --repo https://registry.npmjs.org --version 4.18.2"
-    package: express
-    repo: https://registry.npmjs.org
-    test_mode: False
-    version: 4.18.2
+    $ make run ARGS="--package debug --repo https://registry.npmjs.org --version 4.3.4"
+    Прямые зависимости debug@4.3.4:
+    ms: 2.1.2
 
     $ make run ARGS="--package A --repo tests/data/repo.txt --test-mode --version 1.0.0"
-    package: A
-    repo: tests/data/repo.txt
-    test_mode: True
-    version: 1.0.0
+    Прямые зависимости A@1.0.0:
+    B
+    C
+
+    $ make run ARGS="--package D --repo tests/data/repo.txt --test-mode --version 1.0.0"
+    Прямые зависимости D@1.0.0:
+    нет
+
+    $ make run ARGS="--package debug --repo https://registry.npmjs.org --version 99.0.0"
+    Ошибка: пакет или версия не найдены: https://registry.npmjs.org/debug/99.0.0
 
     $ make run ARGS="--package express --repo ftp://x.com --version 1.0.0"
     Ошибка: некорректный URL репозитория: ftp://x.com
 
-    $ make run ARGS="--package express --repo https://registry.npmjs.org --version 1.0"
-    Ошибка: некорректная версия пакета: 1.0
-
-    $ make run ARGS="--package a --repo tests/data/repo.txt --test-mode --version 1.0.0"
-    Ошибка: в тестовом режиме имя пакета - большие латинские буквы
-
-    $ make run ARGS="--package A --repo nofile.txt --test-mode --version 1.0.0"
-    Ошибка: файл тестового репозитория не найден: nofile.txt
+    $ make run ARGS="--package Z --repo tests/data/repo.txt --test-mode --version 1.0.0"
+    Ошибка: пакет Z не найден в tests/data/repo.txt
