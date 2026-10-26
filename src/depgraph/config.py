@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from depgraph.errors import ConfigError
+
 NPM_NAME = re.compile(
     r"^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
 )
@@ -12,10 +14,6 @@ VERSION = re.compile(
 )
 URL_SCHEMES = ("http", "https")
 MAX_NAME_LENGTH = 214
-
-
-class ConfigError(Exception):
-    pass
 
 
 @dataclass(frozen=True)

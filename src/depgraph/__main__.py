@@ -1,8 +1,10 @@
 import argparse
 import sys
-from dataclasses import asdict
 
-from depgraph.config import ConfigError, build_config
+from depgraph.config import build_config
+from depgraph.errors import ConfigError, RepoError
+from depgraph.npm import fetch_dependencies
+from depgraph.testrepo import load_dependencies
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -29,9 +31,22 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def print_config(config):
-    for key, value in asdict(config).items():
-        print(f"{key}: {value}")
+def collect_dependencies(config):
+    if config.test_mode:
+        return load_dependencies(config.repo, config.package)
+    return fetch_dependencies(config.repo, config.package, config.version)
+
+
+def format_dependency(name, spec):
+    return f"{name}: {spec}" if spec else name
+
+
+def print_dependencies(config, dependencies):
+    print(f"Прямые зависимости {config.package}@{config.version}:")
+    if not dependencies:
+        print("нет")
+    for name, spec in dependencies.items():
+        print(format_dependency(name, spec))
 
 
 def main(argv=None):
@@ -40,10 +55,11 @@ def main(argv=None):
         config = build_config(
             args.package, args.repo, args.test_mode, args.version
         )
-    except ConfigError as error:
+        dependencies = collect_dependencies(config)
+    except (ConfigError, RepoError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return EXIT_ERROR
-    print_config(config)
+    print_dependencies(config, dependencies)
     return EXIT_OK
 
 
