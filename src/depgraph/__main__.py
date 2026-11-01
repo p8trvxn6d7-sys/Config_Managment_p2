@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from depgraph.config import build_config
+from depgraph.dot import build_dot
 from depgraph.errors import ConfigError, RepoError
 from depgraph.graph import build_graph, find_cycles
 from depgraph.loadorder import load_order
@@ -31,10 +32,16 @@ def parse_args(argv):
         help="режим работы с тестовым репозиторием",
     )
     parser.add_argument("--version", required=True, help="версия пакета")
-    parser.add_argument(
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument(
         "--load-order",
         action="store_true",
         help="вывести порядок загрузки зависимостей пакета",
+    )
+    output.add_argument(
+        "--graphviz",
+        action="store_true",
+        help="вывести граф зависимостей на языке Graphviz (DOT)",
     )
     return parser.parse_args(argv)
 
@@ -60,6 +67,8 @@ def show_result(args, root, graph, cycles):
     if args.load_order:
         order, skipped = load_order(graph, root)
         print_load_order(root, order, skipped)
+    elif args.graphviz:
+        print(build_dot(root, graph))
     else:
         print_graph(root, graph, cycles)
 

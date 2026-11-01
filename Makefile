@@ -1,10 +1,13 @@
 PYTHON ?= python3
 export PYTHONPATH := src
 
-.PHONY: run test
+.PHONY: run test clean
 
 run:
-	$(PYTHON) -m depgraph $(ARGS)
+	@$(PYTHON) -m depgraph $(ARGS)
 
 test:
-	$(PYTHON) -m unittest discover -s tests -v
+	@$(PYTHON) -m unittest discover -s tests -v
+
+clean:
+	find . -name __pycache__ -type d -prune -exec rm -rf {} +

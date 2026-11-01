@@ -17,6 +17,19 @@ ROUTES = {
 }
 DATA = "tests/data/"
 LOAD_ORDER = "--load-order"
+GRAPHVIZ = "--graphviz"
+DIAMOND_DOT = """digraph "A" {
+    node [shape=box];
+    "A" [style=filled, fillcolor=lightblue];
+    "B";
+    "C";
+    "D";
+    "A" -> "B";
+    "A" -> "C";
+    "B" -> "D";
+    "C" -> "D";
+}
+"""
 
 
 def run(args):
@@ -146,6 +159,45 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, EXIT_ERROR)
         self.assertEqual(out, "")
         self.assertIn("Ошибка", err)
+
+    def test_graphviz_diamond(self):
+        code, out, _ = self.run_file("A", "repo.txt", GRAPHVIZ)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(out, DIAMOND_DOT)
+
+    def test_graphviz_prints_only_the_diagram(self):
+        _, out, _ = self.run_file("A", "order.txt", GRAPHVIZ)
+        self.assertTrue(out.startswith("digraph"))
+        self.assertNotIn("Граф зависимостей", out)
+        self.assertNotIn("Порядок загрузки", out)
+
+    def test_graphviz_cycle(self):
+        code, out, _ = self.run_file("A", "cycle.txt", GRAPHVIZ)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn('    "C" -> "A";', out)
+
+    def test_graphviz_self_dependency(self):
+        code, out, _ = self.run_file("A", "selfloop.txt", GRAPHVIZ)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn('    "A" -> "A";', out)
+
+    def test_graphviz_npm(self):
+        code, out, _ = self.run_npm("app", "1.0.0", GRAPHVIZ)
+        self.assertEqual(code, EXIT_OK)
+        self.assertTrue(out.startswith('digraph "app@1.0.0" {'))
+        self.assertIn('    "app@1.0.0" -> "lib@1.2.0";', out)
+
+    def test_graphviz_unknown_package(self):
+        code, out, err = self.run_file("Z", "repo.txt", GRAPHVIZ)
+        self.assertEqual(code, EXIT_ERROR)
+        self.assertEqual(out, "")
+        self.assertIn("Ошибка", err)
+
+    def test_output_options_are_mutually_exclusive(self):
+        code, out, err = self.run_file("A", "repo.txt", GRAPHVIZ, LOAD_ORDER)
+        self.assertNotEqual(code, EXIT_OK)
+        self.assertEqual(out, "")
+        self.assertIn("not allowed", err)
 
     def test_validation_error(self):
         code, out, err = self.run_npm("debug", "x")
