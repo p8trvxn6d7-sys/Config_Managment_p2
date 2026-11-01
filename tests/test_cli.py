@@ -16,6 +16,7 @@ ROUTES = {
     "/y": {"versions": {"1.0.0": {"dependencies": {"x": "^1.0.0"}}}},
 }
 DATA = "tests/data/"
+LOAD_ORDER = "--load-order"
 
 
 def run(args):
@@ -35,14 +36,14 @@ class CliTest(unittest.TestCase):
         self.addCleanup(stop_server, server)
         return server_url(server)
 
-    def run_npm(self, package, version):
+    def run_npm(self, package, version, *extra):
         url = self.start_registry()
         return run(["--package", package, "--repo", url,
-                    "--version", version])
+                    "--version", version, *extra])
 
-    def run_file(self, package, name):
+    def run_file(self, package, name, *extra):
         return run(["--package", package, "--repo", DATA + name,
-                    "--test-mode", "--version", "1.0.0"])
+                    "--test-mode", "--version", "1.0.0", *extra])
 
     def test_prints_graph(self):
         code, out, _ = self.run_npm("debug", "4.3.4")
@@ -89,6 +90,61 @@ class CliTest(unittest.TestCase):
     def test_test_mode_unknown_package(self):
         code, _, err = self.run_file("Z", "repo.txt")
         self.assertEqual(code, EXIT_ERROR)
+        self.assertIn("Ошибка", err)
+
+    def test_graph_is_default_output(self):
+        code, out, _ = self.run_file("A", "repo.txt")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Граф зависимостей", out)
+        self.assertNotIn("Порядок загрузки", out)
+
+    def test_load_order_diamond(self):
+        code, out, _ = self.run_file("A", "repo.txt", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Порядок загрузки зависимостей A:", out)
+        self.assertIn("1. D\n2. B\n3. C\n4. A\n", out)
+        self.assertIn("Разорванные циклические связи: нет", out)
+        self.assertNotIn("Граф зависимостей", out)
+
+    def test_load_order_larger_graph(self):
+        code, out, _ = self.run_file("A", "order.txt", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        expected = "1. D\n2. G\n3. E\n4. B\n5. F\n6. C\n7. A\n"
+        self.assertIn(expected, out)
+
+    def test_load_order_of_inner_package(self):
+        code, out, _ = self.run_file("B", "order.txt", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("1. D\n2. G\n3. E\n4. B\n", out)
+        self.assertNotIn(". A\n", out)
+
+    def test_load_order_cycle(self):
+        code, out, _ = self.run_file("A", "cycle.txt", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("1. D\n2. C\n3. B\n4. A\n", out)
+        self.assertIn("Разорванные циклические связи:\n  C -> A", out)
+
+    def test_load_order_self_dependency(self):
+        code, out, _ = self.run_file("A", "selfloop.txt", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("1. B\n2. A\n", out)
+        self.assertIn("  A -> A", out)
+
+    def test_load_order_npm(self):
+        code, out, _ = self.run_npm("app", "1.0.0", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("1. lib@1.2.0\n2. app@1.0.0\n", out)
+
+    def test_load_order_registry_cycle(self):
+        code, out, _ = self.run_npm("x", "1.0.0", LOAD_ORDER)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("1. y@1.0.0\n2. x@1.0.0\n", out)
+        self.assertIn("  y@1.0.0 -> x@1.0.0", out)
+
+    def test_load_order_unknown_package(self):
+        code, out, err = self.run_file("Z", "repo.txt", LOAD_ORDER)
+        self.assertEqual(code, EXIT_ERROR)
+        self.assertEqual(out, "")
         self.assertIn("Ошибка", err)
 
     def test_validation_error(self):

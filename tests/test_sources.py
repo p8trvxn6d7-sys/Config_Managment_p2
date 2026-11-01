@@ -17,6 +17,14 @@ ROUTES = {
         "dist-tags": {"latest": "2.0.0"},
         "versions": {"1.0.0": {}, "1.2.0": {}, "2.0.0": {}},
     },
+    "/pinned": {
+        "dist-tags": {"latest": "1.3.0"},
+        "versions": {"1.2.0": {}, "1.3.0": {}, "1.3.1": {}},
+    },
+    "/old": {
+        "versions": {"1.0.0": {}, "1.1.0": {"deprecated": "устарел"}},
+    },
+    "/onlyold": {"versions": {"1.0.0": {"deprecated": "устарел"}}},
     "/@scope%2Fpkg": {"versions": {"1.0.0": {}}},
     "/list": [1, 2],
     "/badversions": {"versions": []},
@@ -39,6 +47,18 @@ class NpmSourceTest(unittest.TestCase):
 
     def test_resolve_scoped(self):
         self.assertEqual(self.source().resolve("@scope/pkg", "*"), "1.0.0")
+
+    def test_latest_tag_preferred_over_higher_version(self):
+        self.assertEqual(self.source().resolve("pinned", "^1.2.0"), "1.3.0")
+
+    def test_latest_tag_ignored_when_out_of_range(self):
+        self.assertEqual(self.source().resolve("pinned", "~1.2.0"), "1.2.0")
+
+    def test_deprecated_version_avoided(self):
+        self.assertEqual(self.source().resolve("old", "^1.0.0"), "1.0.0")
+
+    def test_deprecated_version_used_if_only_choice(self):
+        self.assertEqual(self.source().resolve("onlyold", "^1.0.0"), "1.0.0")
 
     def test_no_matching_version(self):
         with self.assertRaises(RepoError):

@@ -67,11 +67,31 @@ def fetch_document(repo, package):
     return data
 
 
+def is_deprecated(manifest):
+    return isinstance(manifest, dict) and bool(manifest.get("deprecated"))
+
+
+def pick_latest(tags, versions, spec):
+    latest = tags.get("latest")
+    if latest in versions and max_satisfying([latest], spec) == latest:
+        return str(latest)
+    return None
+
+
+def pick_preferred(versions, spec):
+    active = [
+        name for name, manifest in versions.items()
+        if not is_deprecated(manifest)
+    ]
+    return max_satisfying(active, spec) or max_satisfying(list(versions), spec)
+
+
 def pick_version(document, package, spec):
     tags = document.get("dist-tags", {})
     if spec in tags:
         return str(tags[spec])
-    found = max_satisfying(list(document.get("versions", {})), spec)
+    versions = document.get("versions", {})
+    found = pick_latest(tags, versions, spec) or pick_preferred(versions, spec)
     if found is None:
         raise RepoError(
             f"у пакета {package} нет версии, подходящей под {spec!r}"

@@ -4,8 +4,9 @@ import sys
 from depgraph.config import build_config
 from depgraph.errors import ConfigError, RepoError
 from depgraph.graph import build_graph, find_cycles
+from depgraph.loadorder import load_order
 from depgraph.npm import NpmSource
-from depgraph.report import print_graph
+from depgraph.report import print_graph, print_load_order
 from depgraph.testrepo import FileSource
 
 EXIT_OK = 0
@@ -30,6 +31,11 @@ def parse_args(argv):
         help="режим работы с тестовым репозиторием",
     )
     parser.add_argument("--version", required=True, help="версия пакета")
+    parser.add_argument(
+        "--load-order",
+        action="store_true",
+        help="вывести порядок загрузки зависимостей пакета",
+    )
     return parser.parse_args(argv)
 
 
@@ -50,6 +56,14 @@ def analyze(config):
     return root, graph, find_cycles(graph)
 
 
+def show_result(args, root, graph, cycles):
+    if args.load_order:
+        order, skipped = load_order(graph, root)
+        print_load_order(root, order, skipped)
+    else:
+        print_graph(root, graph, cycles)
+
+
 def report_error(message):
     print(f"Ошибка: {message}", file=sys.stderr)
     return EXIT_ERROR
@@ -66,7 +80,7 @@ def main(argv=None):
         return report_error(error)
     except RecursionError:
         return report_error("граф зависимостей слишком глубокий")
-    print_graph(root, graph, cycles)
+    show_result(args, root, graph, cycles)
     return EXIT_OK
 
 
