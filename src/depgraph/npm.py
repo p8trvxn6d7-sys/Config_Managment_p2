@@ -4,18 +4,29 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from depgraph.errors import RepoError
+from depgraph.semver import max_satisfying
 
 HTTP_NOT_FOUND = 404
 TIMEOUT_SECONDS = 10
+JSON_ACCEPT = "application/json"
+ABBREVIATED_ACCEPT = (
+    "application/vnd.npm.install-v1+json; q=1.0, "
+    "application/json; q=0.8, */*"
+)
+DOCUMENT_FIELDS = ("versions", "dist-tags")
+
+
+def build_package_url(repo, package):
+    base = repo.rstrip("/")
+    return f"{base}/{quote(package, safe='@')}"
 
 
 def build_url(repo, package, version):
-    base = repo.rstrip("/")
-    return f"{base}/{quote(package, safe='@')}/{quote(version)}"
+    return f"{build_package_url(repo, package)}/{quote(version)}"
 
 
-def fetch_json(url):
-    request = Request(url, headers={"Accept": "application/json"})
+def fetch_json(url, accept=JSON_ACCEPT):
+    request = Request(url, headers={"Accept": accept})
     try:
         with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             return json.load(response)
@@ -43,3 +54,46 @@ def extract_dependencies(data):
 def fetch_dependencies(repo, package, version):
     data = fetch_json(build_url(repo, package, version))
     return extract_dependencies(data)
+
+
+def fetch_document(repo, package):
+    url = build_package_url(repo, package)
+    data = fetch_json(url, ABBREVIATED_ACCEPT)
+    if not isinstance(data, dict):
+        raise RepoError("неожиданный формат ответа репозитория")
+    for field in DOCUMENT_FIELDS:
+        if not isinstance(data.get(field, {}), dict):
+            raise RepoError(f"поле {field} имеет неожиданный формат")
+    return data
+
+
+def pick_version(document, package, spec):
+    tags = document.get("dist-tags", {})
+    if spec in tags:
+        return str(tags[spec])
+    found = max_satisfying(list(document.get("versions", {})), spec)
+    if found is None:
+        raise RepoError(
+            f"у пакета {package} нет версии, подходящей под {spec!r}"
+        )
+    return found
+
+
+class NpmSource:
+    def __init__(self, repo):
+        self.repo = repo
+        self.documents = {}
+
+    def document(self, package):
+        if package not in self.documents:
+            self.documents[package] = fetch_document(self.repo, package)
+        return self.documents[package]
+
+    def resolve(self, package, spec):
+        return pick_version(self.document(package), package, spec)
+
+    def dependencies(self, package, version):
+        versions = self.document(package).get("versions", {})
+        if version not in versions:
+            raise RepoError(f"версия {package}@{version} не найдена")
+        return extract_dependencies(versions[version])

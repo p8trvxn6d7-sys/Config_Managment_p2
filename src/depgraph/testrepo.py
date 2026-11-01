@@ -34,3 +34,17 @@ def load_dependencies(path, package):
     if package not in graph:
         raise RepoError(f"пакет {package} не найден в {path}")
     return {name: "" for name in graph[package]}
+
+
+class FileSource:
+    def __init__(self, path):
+        self.path = path
+        self.graph = load_graph(path)
+
+    def resolve(self, package, spec):
+        return ""
+
+    def dependencies(self, package, version):
+        if package not in self.graph:
+            raise RepoError(f"пакет {package} не найден в {self.path}")
+        return {name: "" for name in self.graph[package]}
